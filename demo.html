@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AI 控制网页 · 示例</title>
+<style>
+  *{box-sizing:border-box}
+  body{margin:0;padding:24px;background:#0d1117;color:#c9d1d9;
+       font:14px/1.6 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif}
+  h1{font-size:20px;margin:0 0 4px}
+  .sub{color:#8b949e;font-size:13px;margin-bottom:20px}
+  .card{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:16px;margin-bottom:14px}
+  label{display:block;font-size:12px;color:#8b949e;margin-bottom:6px}
+  input{width:100%;padding:8px;border-radius:6px;border:1px solid #30363d;
+        background:#0d1117;color:#c9d1d9;font:inherit}
+  button{background:#238636;color:#fff;border:0;border-radius:6px;padding:8px 16px;
+         font:inherit;cursor:pointer;margin-right:8px}
+  button.gray{background:#21262d;border:1px solid #30363d}
+  #stage{padding:20px;border:2px dashed #30363d;border-radius:8px;text-align:center;margin-top:8px}
+  #out{background:#000;border-radius:6px;padding:12px;font:12px/1.7 monospace;
+       white-space:pre-wrap;min-height:80px;color:#7ee787;max-height:200px;overflow:auto}
+  .warn{background:#2d1a00;border:1px solid #9e6a03;border-radius:6px;padding:10px;
+        font-size:12px;color:#f0b72f;margin-bottom:14px}
+</style>
+</head>
+<body>
+
+<h1>AI 实时控制网页 · 示例</h1>
+<div class="sub">在下面填入你自己的后端地址与临时票据，然后对着中间那块区域下指令</div>
+
+<div class="warn">
+  ⚠️ 密钥只存在于内存，刷新即失效。<b>不要</b>把真实密钥写进这个文件再提交到公开仓库。
+</div>
+
+<div class="card">
+  <label>模型端点（你自己的后端 /v1/chat/completions）</label>
+  <input id="ep" placeholder="https://your-server.com/v1/chat/completions">
+  <div style="height:10px"></div>
+  <label>临时票据（Token，运行时注入）</label>
+  <input id="tk" type="password" placeholder="sk-... 或不填（由后端网关鉴权）">
+</div>
+
+<div class="card">
+  <label>给 AI 的指令</label>
+  <input id="cmd" placeholder="例如：把下面那块区域背景改成深蓝色，文字改成「AI 已接管」">
+  <div style="margin-top:10px">
+    <button id="run">执行</button>
+    <button class="gray" id="snap">看页面快照</button>
+    <button class="gray" id="mem">看记忆</button>
+    <button class="gray" id="clr">清空记忆</button>
+  </div>
+</div>
+
+<div class="card">
+  <label>AI 可以操作的区域</label>
+  <div id="stage">
+    <p id="msg">这块内容可以被 AI 修改</p>
+    <button id="targetBtn">示例按钮</button>
+    <input id="targetInput" placeholder="示例输入框" style="max-width:240px;margin-top:8px">
+  </div>
+</div>
+
+<div class="card">
+  <label>输出</label>
+  <div id="out">就绪。</div>
+</div>
+
+<script src="ai-control.js"></script>
+<script>
+  var out = document.getElementById('out');
+  function say(t){ out.textContent = t; }
+  function append(t){ out.textContent += '\n' + t; }
+
+  /* 注册一个业务工具：AI 可以直接改中间那块区域 */
+  AI.register('setStage', function (a) {
+    var s = document.getElementById('stage');
+    if (a.color) s.style.background = a.color;
+    if (a.text)  document.getElementById('msg').textContent = a.text;
+    return { ok: true, now: { bg: s.style.background, text: document.getElementById('msg').textContent } };
+  }, '修改演示区域的背景色与文字，参数 {color, text}');
+
+  document.getElementById('run').onclick = function () {
+    var ep = document.getElementById('ep').value.trim();
+    var tk = document.getElementById('tk').value.trim();
+    var cmd = document.getElementById('cmd').value.trim();
+    if (!ep) { say('请先填模型端点'); return; }
+    if (!cmd) { say('请先写指令'); return; }
+
+    AI.setup({ endpoint: ep, token: tk });   /* token 只在内存里 */
+    say('执行中…（AI 会先看清页面，再动手）');
+
+    AI.chat(cmd).then(function (r) {
+      say('完成：\n' + r);
+      /* 把这次做的事记下来，下次 AI 还记得 */
+      AI.remember('最后一次指令', cmd);
+      AI.remember('最后修改时间', new Date().toLocaleString('zh-CN'));
+    }).catch(function (e) {
+      say('失败：' + e.message + '\n\n常见原因：端点不通 / 票据无效 / 模型不支持工具调用');
+    });
+  };
+
+  document.getElementById('snap').onclick = function () {
+    say(AI.snapshot());
+  };
+  document.getElementById('mem').onclick = function () {
+    say(AI.exportMemory() || '(记忆为空)');
+  };
+  document.getElementById('clr').onclick = function () {
+    AI.clearMemory(); say('记忆已清空');
+  };
+  document.getElementById('targetBtn').onclick = function () {
+    append('示例按钮被点了');
+  };
+</script>
+</body>
+</html>
